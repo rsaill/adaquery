@@ -107,7 +107,7 @@ and merge_branches a b =
 
 let tree_of_leaves (tree:t_tree) (f:loc -> t_leaf) (lst:ident list) : t_tree =
   List.fold_left (
-    fun map (lc,name) -> merge_trees tree (M.singleton name (Leaf [f lc]))
+    fun tree (lc,name) -> merge_trees tree (M.singleton name (Leaf [f lc]))
   ) tree lst 
 
 let rec decl_to_tree : t_decl -> t_tree = function

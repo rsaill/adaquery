@@ -37,8 +37,8 @@ let get_loc (lb:Lexing.lexbuf) : string * int * int =
 let parse (tbl:Table.t) (lb:Lexing.lexbuf) : unit =
   try
 (*     debug "Processing file '%s' ...\n" lb.Lexing.lex_curr_p.Lexing.pos_fname; *)
-    List.iter (Table.add_decl tbl) (Parser.goal_symbol Lexer.token lb)
-(*     List.iter (Print.print 0) (Parser.goal_symbol Lexer.token lb) *)
+    List.iter (Table.add_decl tbl) (Parser.goal_symbol Lexer.token lb);
+(*      List.iter (Print.print 0) (Parser.goal_symbol Lexer.token lb) *)
   with
     | Parser.Error ->
       begin

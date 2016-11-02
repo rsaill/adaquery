@@ -3,7 +3,7 @@ type path = string list
 type ident = loc*string
 type compound_name = ident list
 type t_designator = Compound_Name of compound_name | String_Name of ident
-type t_other = | Subunit | Body_stub | Prot | Task
+type t_other = Subunit | Body_stub | Prot | Task
 type t_name = Simple_name of ident | No_name | Selected_comp of t_name*ident
 
 type t_decl =
