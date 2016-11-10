@@ -1,7 +1,3 @@
-
-let debug fmt =
-  Printf.eprintf fmt
-
 let split s = Str.split_delim (Str.regexp_string ".") s
 
 (* Option *)
@@ -23,8 +19,8 @@ let get_cache_file () =
   in
   (if not (Sys.file_exists dir) then
      if Sys.command ("mkdir " ^ dir) = 0 then
-       debug "Directory '%s' was created.\n" dir
-     else debug "Fail to create directory '%s'.\n" dir);
+       Print.debug "Directory '%s' was created." dir
+     else Print.debug "Fail to create directory '%s'." dir);
   Printf.sprintf "%s/%s.cache" dir !project
 
 (* Indexing *)
@@ -36,19 +32,18 @@ let get_loc (lb:Lexing.lexbuf) : string * int * int =
 
 let parse (tbl:Table.t) (lb:Lexing.lexbuf) : unit =
   try
-(*     debug "Processing file '%s' ...\n" lb.Lexing.lex_curr_p.Lexing.pos_fname; *)
+    Print.debug "Processing file '%s' ..." lb.Lexing.lex_curr_p.Lexing.pos_fname;
     List.iter (Table.add_decl tbl) (Parser.goal_symbol Lexer.token lb);
-(*      List.iter (Print.print 0) (Parser.goal_symbol Lexer.token lb) *)
   with
     | Parser.Error ->
       begin
         let (fn,l,c) = get_loc lb in
-        debug "[file:%s;line:%i;column:%i] Parsing error: unexpected token '%s'.\n" fn l c (Lexing.lexeme lb)
+        Print.debug "[file:%s;line:%i;column:%i] Parsing error: unexpected token '%s'." fn l c (Lexing.lexeme lb)
       end
     | Lexer.Error (loc,msg) ->
       begin
         let (fn,l,c) = get_loc lb in
-        debug "[file:%s;line:%i;column:%i] Lexing error: %s\n" fn l c msg
+        Print.debug "[file:%s;line:%i;column:%i] Lexing error: %s." fn l c msg
       end
 
 let fullname fn =
@@ -66,6 +61,7 @@ let index_file (tbl:Table.t) (file:string) : unit =
 
 let args = [
   "-p", Arg.Set_string project ,"Set the project to use";
+  "-v", Arg.Set Print.verbose_mode ,"Verbose mode";
   "-index", Arg.Unit (fun _ -> action := Index) ,"Index a list of files";
   "-locate", Arg.String (fun s -> action := Locate (split s)) ,"Locate an object or a package";
   "-search", Arg.String (fun s -> action := Search (split s)) ,"Search for objects or packages matching a prefix";
@@ -96,4 +92,4 @@ let _ =
         Table.print tbl s
     end
   with
-  | Sys_error err   -> Printf.eprintf "ERROR %s.\n" err; exit 1
+  | Sys_error err   -> Print.debug "ERROR %s." err; exit 1

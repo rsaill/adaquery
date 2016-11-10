@@ -38,26 +38,23 @@ let rec print_branch (ident:int) out : t_branch -> unit = function
   | Leaf [l] -> Printf.fprintf out "%s\n" (leaf_to_string l)
   | Leaf [] -> assert false
   | Leaf (l::_) -> Printf.fprintf out "%s and other definitions\n" (leaf_to_string l)
-  | Node (_,_,tree) ->
-    begin
-      Printf.fprintf out "Package\n";
-      M.iter ( fun key br ->
-          Printf.fprintf out "%s%s -> %a" (its ident) key (print_branch (ident+2)) br
-        ) tree
-    end
+  | Node (_,_,tree) -> print_tree ident out tree
   | Alias (_,path) -> Printf.fprintf out "Alias of %s\n" (String.concat "." path)
 
-(* Utils *)
+and print_tree (ident:int) out (tree:t_tree) : unit =
+  Printf.fprintf out "Package\n";
+  M.iter ( fun key br ->
+      Printf.fprintf out "%s%s -> %a" (its ident) key (print_branch (ident+2)) br
+    ) tree
 
-let debug fmt =
-  Printf.eprintf fmt
+(* Utils *)
 
 let designator_to_string : t_designator -> ident option = function
   | Compound_Name [id] -> Some id
   | String_Name id -> Some id
   | Compound_Name lst ->
    begin
-     debug "Complex subprogram name '%s', skipping.\n"
+     Print.debug "Complex subprogram name '%s', skipping."
        (String.concat "." (List.map snd lst));
      None;
    end
@@ -101,9 +98,9 @@ and merge_branches a b =
   | Node (lc1,isg1,tr1), Node (lc2,isg2,tr2) ->
     Node (merge_opt_loc lc1 lc2, isg1||isg2, merge_trees tr1 tr2)
   | (Leaf _|Alias _), (Node _ as n) | (Node _ as n), (Leaf _|Alias _) ->
-    ( debug "A package has the same name than an object or an alias. Keeping the package.\n"; n)
+    ( Print.debug "A package has the same name than an object or an alias. Keeping the package."; n)
   | (Alias _ as n), Leaf _ | _, (Alias _ as n)->
-    ( debug "An alias has the same name than a package. Keeping the alias.\n"; n)
+    ( Print.debug "An alias has the same name than a package. Keeping the alias."; n)
 
 let tree_of_leaves (tree:t_tree) (f:loc -> t_leaf) (lst:ident list) : t_tree =
   List.fold_left (
@@ -167,53 +164,85 @@ let get_loc_list = function
   | Alias (l,_) -> [l]
   | Node ((lc,_),_,_) -> [lc]
 
-let rec mfind (tbl:t) (f_alias:bool) (pkg:t_tree) (path:path) : t_branch option =
-(*   debug "mfind '%s'.\n" (String.concat "." path); *)
+let rec get_all_suffixes : path -> path list = function
+  | [] -> []
+  | (_::tl) as lst -> lst :: (get_all_suffixes tl)
+
+type t_branch_with_ancestors = { bname:string; branch:t_branch; ancestors:(string*t_tree) list }
+type t_tree_with_ancestors = { pname:string; tree:t_tree; ancestors:(string*t_tree) list }
+
+let rec mfind (tbl:t) (f_alias:bool) (pkg:t_tree_with_ancestors) (path:path) : t_branch_with_ancestors option =
+  Print.debug "mfind '%s' in package '%s'." (String.concat "." path) pkg.pname;
   match path with
   | [] -> assert false
   | [x] ->
-    begin match map_find x pkg with
+    begin match map_find x pkg.tree with
       | Some (Alias (_,path)) when f_alias ->
-        begin match mfind tbl f_alias pkg path with
-          | None -> hfind tbl f_alias path
-          | opt -> opt
-        end
-      | opt -> opt
+        resolve_alias tbl path ((pkg.pname,pkg.tree)::pkg.ancestors)
+      | Some br -> Some { bname=(pkg.pname^"."^x); branch=br; ancestors=((pkg.pname,pkg.tree)::pkg.ancestors) }
+      | None -> None
     end
   | x::lst ->
-    begin match map_find x pkg with
-      | None -> None
-      | Some (Leaf _) -> None
+    begin match map_find x pkg.tree with
+      | None -> (Print.debug "'%s' not found in '%s'." x pkg.pname; None)
+      | Some (Leaf _) -> (Print.debug "'%s' found in '%s' but not a package." x pkg.pname; None)
       | Some (Alias (_,path)) ->
-        begin match mfind tbl f_alias pkg (path@lst) with
-          | None -> hfind tbl f_alias (path@lst)
-          | opt -> opt
+        begin match resolve_pkg_alias tbl path ((pkg.pname,pkg.tree)::pkg.ancestors) with
+          | None -> None
+          | Some pkg -> mfind tbl f_alias pkg lst
         end
-      | Some (Node (_,_,pkg)) -> mfind tbl f_alias pkg lst
+      | Some (Node (_,_,tree)) ->
+        mfind tbl f_alias { pname=(pkg.pname^"."^x); tree;
+                            ancestors=(pkg.pname,pkg.tree)::pkg.ancestors; } lst
     end
 
-and hfind (tbl:t) (f_alias:bool) (lst:path) : t_branch option =
-(*   debug "hfind '%s'.\n" (String.concat "." lst); *)
+and resolve_alias (tbl:t) (path:path) : (string*t_tree) list -> t_branch_with_ancestors option = function
+  | [] -> hfind tbl true path
+  | (pname,tree)::ancestors ->
+    begin match mfind tbl true { pname; tree; ancestors } path with
+      | None -> resolve_alias tbl path ancestors
+      | (Some br) as opt ->
+        begin match br.branch with
+          | Alias (_,path) -> resolve_alias tbl path br.ancestors
+          | _ -> opt
+        end
+    end
+
+and resolve_pkg_alias (tbl:t) (path:path) (parents:(string*t_tree) list) : t_tree_with_ancestors option =
+  match resolve_alias tbl path parents with
+  | None -> None
+  | Some br ->
+    begin match br.branch with
+      | Node (_,_,tree) -> Some { pname=br.bname; tree; ancestors=br.ancestors }
+      | _ -> None
+    end
+
+and hfind (tbl:t) (f_alias:bool) (lst:path) : t_branch_with_ancestors option =
+  Print.debug "hfind '%s'." (String.concat "." lst);
   match lst with
   | [] -> None
   | [n] ->
     begin
-      try Some (Hashtbl.find tbl n)
+      try
+        begin match Hashtbl.find tbl n with
+          | Alias (_,path) when f_alias -> resolve_alias tbl path []
+          | branch -> Some { bname=n; branch; ancestors=[] }
+        end
       with Not_found -> None
     end
-  | n::lst ->
+  | pname::lst ->
     begin
-      try ( match Hashtbl.find tbl n with
+      try ( match Hashtbl.find tbl pname with
           | Leaf _ -> None
           | Alias (_,path) -> hfind tbl f_alias (path@lst)
-          | Node (_,_,pkg) -> mfind tbl f_alias pkg lst )
+          | Node (_,_,tree) -> mfind tbl f_alias { pname; tree; ancestors=[] } lst )
       with Not_found -> None
     end
 
 and locate (tbl:t) (lst:path) : loc list =
   match hfind tbl false lst with
   | None -> []
-  | Some br -> get_loc_list br
+  | Some br -> get_loc_list br.branch
 
 let remove_last (lst:string list) : (string list*string) option =
   let rec aux : string list -> string list*string = function
@@ -251,11 +280,11 @@ let search (tbl:t) (lst:path) : string list =
     end
   | Some (pkg,pre) ->
     begin match hfind tbl true pkg with
-      | None -> ( debug "[Search] Package '%s' not found.\n" (String.concat "." pkg); [] )
-      | Some br -> search_in_branch (String.concat "." pkg) pre br 
+      | None -> ( Print.debug "[Search] Package '%s' not found." (String.concat "." pkg); [] )
+      | Some br -> search_in_branch (String.concat "." pkg) pre br.branch 
     end
 
 let print (tbl:t) (lst:path) : unit =
-  match hfind tbl true lst with
+  match hfind tbl false lst with
   | None -> Printf.fprintf stdout "No package or object found.\n"
-  | Some br -> print_branch 0 stdout br
+  | Some br -> print_branch 0 stdout br.branch

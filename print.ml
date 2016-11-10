@@ -41,3 +41,9 @@ let rec print (indent:int) : t_decl -> unit = function
   | Exception lst ->
     Printf.printf "%s[Exception] %s.\n" (its indent) (String.concat ", " (List.map snd lst))
   | Other o -> Printf.printf "%s[Other] %a.\n" (its indent) pp_other o
+
+let verbose_mode = ref false
+
+let debug fmt =
+  if !verbose_mode then Printf.kfprintf (fun _ -> prerr_newline () ) stderr fmt
+  else Printf.ifprintf stderr fmt
