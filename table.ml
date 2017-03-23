@@ -82,6 +82,8 @@ let create () : t = Hashtbl.create 147
 
 (* Building the table *)
 
+
+
 let rec merge_trees (tr1:t_tree) (tr2:t_tree) : t_tree =
   let aux_opt _ a_opt b_opt =
     match a_opt, b_opt with
@@ -92,11 +94,14 @@ let rec merge_trees (tr1:t_tree) (tr2:t_tree) : t_tree =
   M.merge aux_opt tr1 tr2
 
 and merge_branches a b =
-  let merge_opt_loc lc1 lc2 = if (snd lc1) then lc1 else lc2 in
+  let merge_loc (lc1:loc*bool) (lc2:loc*bool) =
+    (if (snd lc1) && (snd lc2) then
+       Print.debug "Two packages have the same name. Merging.");
+    if (snd lc1) then lc1 else lc2 in
   match a, b with
   | Leaf lst1, Leaf lst2 -> Leaf (lst1@lst2)
   | Node (lc1,isg1,tr1), Node (lc2,isg2,tr2) ->
-    Node (merge_opt_loc lc1 lc2, isg1||isg2, merge_trees tr1 tr2)
+    Node (merge_loc lc1 lc2, isg1||isg2, merge_trees tr1 tr2)
   | (Leaf _|Alias _), (Node _ as n) | (Node _ as n), (Leaf _|Alias _) ->
     ( Print.debug "A package has the same name than an object or an alias. Keeping the package."; n)
   | (Alias _ as n), Leaf _ | _, (Alias _ as n)->

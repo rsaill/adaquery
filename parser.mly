@@ -1,11 +1,14 @@
 %{
 open Datatypes
 
-let rec mk_pkg (cname:compound_name) (is_generic:bool) (content:t_package) : t_decl =
+let mk_pkg (cname:compound_name) (is_generic:bool) (content:t_package) : t_decl =
+  let rec aux cname content lc_bool =
   match cname with
   | [] -> assert false
-  | [(lc,name)] -> Package (name,(lc,true),is_generic,content)
-  | (lc,name)::cname -> mk_pkg cname is_generic (Decl [Package (name,(lc,false),false,content)])
+  | [(lc,name)] -> Package (name,(lc,lc_bool),is_generic,content)
+  | (lc,name)::cname -> aux cname (Decl [Package (name,(lc,lc_bool),false,content)]) false
+  in
+  aux cname content true
 
 let set_generic : t_decl -> t_decl = function
   | Package (name,lc,_,content) -> Package (name,lc,true,content)
