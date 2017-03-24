@@ -7,6 +7,7 @@ type t_action =
   | Search of Datatypes.path
   | Locate of Datatypes.path
   | Print of Datatypes.path
+  | Extract_Alias
 
 let action = ref Index
 let project = ref "myproject" 
@@ -22,6 +23,17 @@ let get_cache_file () =
        Print.debug "Directory '%s' was created." dir
      else Print.debug "Fail to create directory '%s'." dir);
   Printf.sprintf "%s/%s.cache" dir !project
+
+let get_alias_file () =
+  let dir =
+    try (Unix.getenv "HOME") ^ "/.adaquery"
+    with Not_found -> "."
+  in
+  (if not (Sys.file_exists dir) then
+     if Sys.command ("mkdir " ^ dir) = 0 then
+       Print.debug "Directory '%s' was created." dir
+     else Print.debug "Fail to create directory '%s'." dir);
+  Printf.sprintf "%s/%s.alias" dir !project
 
 (* Indexing *)
 
@@ -57,6 +69,29 @@ let index_file (tbl:Table.t) (file:string) : unit =
   lb.Lexing.lex_curr_p <- { lb.Lexing.lex_curr_p with Lexing.pos_fname = fullname file; };
   parse tbl lb
 
+(* Alias *)
+
+let extract_alias (file:string) : (string*Datatypes.path) list =
+  let input = open_in file in
+  let lb = Lexing.from_channel input in
+  let _ = lb.Lexing.lex_curr_p <- { lb.Lexing.lex_curr_p with Lexing.pos_fname = fullname file; } in
+  try
+    List.flatten (List.map Alias.get_alias (Parser.goal_symbol Lexer.token lb))
+  with
+    | Parser.Error ->
+      begin
+        let (fn,l,c) = get_loc lb in
+        Print.debug "[file:%s;line:%i;column:%i] Parsing error: unexpected token '%s'."
+          fn l c (Lexing.lexeme lb);
+        []
+      end
+    | Lexer.Error (loc,msg) ->
+      begin
+        let (fn,l,c) = get_loc lb in
+        Print.debug "[file:%s;line:%i;column:%i] Lexing error: %s." fn l c msg;
+        []
+      end
+
 (* Main *)
 
 let args = [
@@ -90,6 +125,12 @@ let _ =
       | Print s ->
         let tbl = Table.read (get_cache_file ()) in
         Table.print tbl s
+      | Extract_Alias ->
+        let alias =
+          List.map (fun fn -> let fn = fullname fn in (fn, extract_alias fn))
+            !files_to_index
+        in
+        Alias.update (get_alias_file ()) alias
     end
   with
   | Sys_error err   -> Print.debug "ERROR %s." err; exit 1
