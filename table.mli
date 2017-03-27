@@ -1,10 +1,10 @@
 open Datatypes
-type t
+type toplevel_tree
 val tname_to_path : t_name -> path option (*TODO move in datatype*)
-val add_decl : t -> t_decl -> unit
-val locate : t -> path -> loc list
-val search : t -> path -> string list
-val print : t -> path -> unit
-val write : t -> string -> unit
-val create : unit -> t
-val read : string -> t
+val add_decl : toplevel_tree -> t_decl -> unit
+val locate : toplevel_tree -> path -> loc list
+val complete : toplevel_tree -> path -> string list
+val print : toplevel_tree -> path -> unit
+val write : toplevel_tree -> string -> unit
+val create : unit -> toplevel_tree
+val read : string -> toplevel_tree

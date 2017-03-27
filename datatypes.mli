@@ -1,5 +1,5 @@
 type loc = Lexing.position
-type path = string list
+type path = string list (* A::B::C = package A.B.C *)
 type ident = loc*string
 type compound_name = ident list
 type t_designator = Compound_Name of compound_name | String_Name of ident

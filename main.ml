@@ -42,7 +42,7 @@ let get_loc (lb:Lexing.lexbuf) : string * int * int =
   let loc = lb.lex_curr_p in
   ( loc.pos_fname, loc.pos_lnum, (loc.pos_cnum-loc.pos_bol+1) )
 
-let parse (tbl:Table.t) (lb:Lexing.lexbuf) : unit =
+let parse (tbl:Table.toplevel_tree) (lb:Lexing.lexbuf) : unit =
   try
     Print.debug "Processing file '%s' ..." lb.Lexing.lex_curr_p.Lexing.pos_fname;
     List.iter (Table.add_decl tbl) (Parser.goal_symbol Lexer.token lb);
@@ -63,7 +63,7 @@ let fullname fn =
     (Sys.getcwd ()) ^ "/" ^ fn
   else fn
 
-let index_file (tbl:Table.t) (file:string) : unit =
+let index_file (tbl:Table.toplevel_tree) (file:string) : unit =
   let input = open_in file in
   let lb = Lexing.from_channel input in
   lb.Lexing.lex_curr_p <- { lb.Lexing.lex_curr_p with Lexing.pos_fname = fullname file; };
@@ -120,7 +120,7 @@ let _ =
         List.iter print_loc lst
       | Search s ->
         let tbl = Table.read (get_cache_file ()) in
-        let lst = Table.search tbl s in
+        let lst = Table.complete tbl s in
         List.iter print_endline lst
       | Print s ->
         let tbl = Table.read (get_cache_file ()) in
