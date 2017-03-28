@@ -1,4 +1,4 @@
-open Datatypes
+open Common
 
 (* Types *)
 
@@ -62,15 +62,6 @@ let designator_to_string : t_designator -> ident option = function
        (String.concat "." (List.map snd lst));
      None;
    end
-
-let tname_to_path (tname:t_name) : path option =
-  let rec aux : t_name -> path = function
-  | Simple_name id -> [snd id]
-  | No_name -> raise (Failure "No_name")
-  | Selected_comp (tname,id) -> (snd id)::(aux tname)
-  in
-  try Some (List.rev (aux tname))
-  with Failure _ -> None
 
 (* Read/Write/Create table *)
 

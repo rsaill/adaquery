@@ -1,4 +1,4 @@
-open Datatypes
+open Common
 
 type t = string*path
 
@@ -6,7 +6,7 @@ let get_alias (d:t_decl) : t list =
   let rec aux lst = function
   | Package (name,_,_,New tn)
   | Package (name,_,_,Renamed tn) ->
-    begin match Table.tname_to_path tn with
+    begin match tname_to_path tn with
       | None -> lst
       | Some p -> (name,p)::lst
     end

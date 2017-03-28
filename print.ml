@@ -1,4 +1,4 @@
-open Datatypes
+open Common
 
 let rec pp_cname out (cn:compound_name) : unit =
   Printf.fprintf out "%s" (String.concat "." (List.map snd cn))

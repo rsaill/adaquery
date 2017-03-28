@@ -16,3 +16,12 @@ type t_decl =
   | Other of t_other
 
 and t_package = New of t_name | Renamed of t_name | Decl of t_decl list
+
+let tname_to_path (tname:t_name) : path option =
+  let rec aux : t_name -> path = function
+  | Simple_name id -> [snd id]
+  | No_name -> raise (Failure "No_name")
+  | Selected_comp (tname,id) -> (snd id)::(aux tname)
+  in
+  try Some (List.rev (aux tname))
+  with Failure _ -> None

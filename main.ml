@@ -1,12 +1,13 @@
+open Common
 let split s = Str.split_delim (Str.regexp_string ".") s
 
 (* Option *)
 
 type t_action =
   | Index
-  | Search of Datatypes.path
-  | Locate of Datatypes.path
-  | Print of Datatypes.path
+  | Search of path
+  | Locate of path
+  | Print of path
   | Extract_Alias
 
 let action = ref Index
@@ -35,7 +36,7 @@ let index_file (tbl:Table.toplevel_tree) (file:string) : unit =
 
 (* Alias *)
 
-let extract_alias (file:string) : (string*Datatypes.path) list =
+let extract_alias (file:string) : (string*path) list =
   let input = open_in file in
   let lb = Lexing.from_channel input in
   let _ = lb.Lexing.lex_curr_p <-

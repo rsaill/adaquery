@@ -1,5 +1,5 @@
 %{
-open Datatypes
+open Common
 
 let mk_pkg (cname:compound_name) (is_generic:bool) (content:t_package) : t_decl =
   let rec aux cname content lc_bool =
@@ -125,9 +125,9 @@ let set_generic : t_decl -> t_decl = function
 %token EOF
 
 %start goal_symbol
-%type <Datatypes.t_decl list> goal_symbol
-%type <Datatypes.t_decl> unit
-%type <Datatypes.t_decl> decl
+%type <Common.t_decl list> goal_symbol
+%type <Common.t_decl> unit
+%type <Common.t_decl> decl
 
 %%
 

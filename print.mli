@@ -1,4 +1,4 @@
-open Datatypes
+open Common
 
 val pp_cname : out_channel -> compound_name -> unit
 val pp_designator : out_channel -> t_designator -> unit
