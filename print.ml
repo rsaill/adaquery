@@ -48,6 +48,22 @@ let debug fmt =
   if !verbose_mode then Printf.kfprintf (fun _ -> prerr_newline () ) stderr fmt
   else Printf.ifprintf stderr fmt
 
+let get_loc (loc:Lexing.position) : string * int * int =
+  let open Lexing in
+  ( loc.pos_fname, loc.pos_lnum, (loc.pos_cnum-loc.pos_bol+1) )
+
+let debug_with_loc (loc:Lexing.position) fmt =
+  if !verbose_mode then
+    begin
+      let (fn,l,c) = get_loc loc in
+      Printf.fprintf stderr "[file:%s;line:%i;column:%i] " fn l c;
+      Printf.kfprintf (fun _ -> prerr_newline () ) stderr fmt
+    end
+  else Printf.ifprintf stderr fmt
+
+let fail fmt =
+  Printf.kfprintf (fun _ -> prerr_newline (); exit 1 ) stderr fmt
+
 let rec pp_path out : path -> unit = function
   | [] -> Printf.fprintf out ""
   | [hd] -> Printf.fprintf out "%s" hd
