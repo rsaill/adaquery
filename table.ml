@@ -204,13 +204,29 @@ let rec mfind (tbl:toplevel_tree) (tree_path,tree:named_tree) (path:path) : name
     begin match tree with
       | Leaf _ -> None
       | Alias (_,alias_path) -> 
-        begin match resolve_alias tbl tree_path alias_path with
-          | Some tree2 -> mfind tbl tree2 lst
+        begin match resolve_alias tbl (tree_path@[x]) alias_path with
+          | Some tree2 ->
+           begin
+(*
+             Print.debug "mfind( %a | %a ) = mfind( %a | %a )"
+               Print.pp_path tree_path Print.pp_path path
+               Print.pp_path (fst tree2) Print.pp_path lst;
+*)
+             mfind tbl tree2 (x::lst)
+           end
           | None -> None
         end
       | Node (_,_,m) ->
         begin match map_find x m with
-          | Some child_tree -> mfind tbl (x::tree_path,child_tree) lst
+          | Some child_tree ->
+            begin
+(*
+             Print.debug "mfind( %a | %a ) = mfind( %a | %a )"
+               Print.pp_path tree_path Print.pp_path path
+               Print.pp_path (tree_path@[x]) Print.pp_path lst;
+*)
+              mfind tbl (tree_path@[x],child_tree) lst
+            end
           | None -> None
         end
     end

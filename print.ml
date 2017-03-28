@@ -47,3 +47,8 @@ let verbose_mode = ref false
 let debug fmt =
   if !verbose_mode then Printf.kfprintf (fun _ -> prerr_newline () ) stderr fmt
   else Printf.ifprintf stderr fmt
+
+let rec pp_path out : path -> unit = function
+  | [] -> Printf.fprintf out ""
+  | [hd] -> Printf.fprintf out "%s" hd
+  | hd::tl -> Printf.fprintf out "%s.%a" hd pp_path tl
