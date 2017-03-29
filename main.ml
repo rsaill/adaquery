@@ -27,12 +27,19 @@ let parse (tbl:Table.toplevel_tree) (lb:Lexing.lexbuf) : unit =
     | Lexer.Error (loc,msg) ->
       Print.debug_with_loc lb.Lexing.lex_curr_p "Lexing error: %s." msg
 
-let index_file (tbl:Table.toplevel_tree) (file:string) : unit =
-  let input = open_in file in
-  let lb = Lexing.from_channel input in
-  lb.Lexing.lex_curr_p <- { lb.Lexing.lex_curr_p with
-                            Lexing.pos_fname = Files.fullname file; };
-  parse tbl lb
+let rec index_file (tbl:Table.toplevel_tree) (file:string) : unit =
+  try
+    begin
+      if Sys.is_directory file then
+        Array.iter (index_file tbl) (Sys.readdir file)
+      else
+        let input = open_in file in
+        let lb = Lexing.from_channel input in
+        lb.Lexing.lex_curr_p <- { lb.Lexing.lex_curr_p with
+                                  Lexing.pos_fname = Files.fullname file; };
+        parse tbl lb
+    end
+  with Sys_error err -> Print.fail "Error: %s" err
 
 (* Alias *)
 
