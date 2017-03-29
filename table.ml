@@ -83,11 +83,11 @@ let designator_to_string : t_designator -> ident option = function
 
 (* Read/Write/Create table *)
 
-let write (tbl:toplevel_tree) (fn:string) : unit =
+let write (tbl:toplevel_tree) (file_to_index:string list) (opt_check_ext:bool) (fn:string) : unit =
   let out = open_out_bin fn in
-  Marshal.to_channel out tbl []
+  Marshal.to_channel out (tbl,file_to_index,opt_check_ext) []
 
-let read (fn:string) : toplevel_tree =
+let read (fn:string) : toplevel_tree * string list * bool =
   let dpin = open_in fn in
   Marshal.from_channel dpin
 
