@@ -2,7 +2,25 @@ open Common
 
 (* Types *)
 
-module M = Map.Make(String)
+module CString :
+  sig
+    type t
+    val compare: t -> t -> int
+    val from_string: string -> t
+    val to_string: t -> string
+    val hash: t -> int
+    val equal: t -> t -> bool
+  end = struct
+  type t = string
+  let from_string x = String.capitalize_ascii (String.lowercase_ascii x)
+  let to_string x = x
+  let compare = String.compare
+  let hash = Hashtbl.hash
+  let equal = String.equal
+end
+
+module M = Map.Make(CString)
+module H = Hashtbl.Make(CString)
 
 type t_leaf =
   | L_Incomplete_Alias of loc
@@ -27,7 +45,7 @@ type t_tree =
   | Alias of loc*path
   | Node of (loc*bool)*bool*t_tree M.t
 
-type toplevel_tree = (string,t_tree) Hashtbl.t (* t is the top level tree *)
+type toplevel_tree = t_tree H.t (* t is the top level tree *)
 
 type named_tree = path * t_tree
 
@@ -45,7 +63,7 @@ let rec print_tree (ident:int) out : t_tree -> unit = function
 and print_tree_map (ident:int) out (tree:t_tree M.t) : unit =
   Printf.fprintf out "Package\n";
   M.iter ( fun key br ->
-      Printf.fprintf out "%s%s -> %a" (its ident) key (print_tree (ident+2)) br
+      Printf.fprintf out "%s%s -> %a" (its ident) (CString.to_string key) (print_tree (ident+2)) br
     ) tree
 
 let print_named_tree (out:out_channel) (_,tree:named_tree) : unit =
@@ -75,7 +93,7 @@ let read (fn:string) : toplevel_tree =
 
 (* Building the table *)
 
-let create () : toplevel_tree = Hashtbl.create 147
+let create () : toplevel_tree = H.create 147
 
 (* Merge two trees *)
 let rec merge_tree_maps (tr1:t_tree M.t) (tr2:t_tree M.t) : t_tree M.t =
@@ -98,14 +116,15 @@ and merge_trees (a:t_tree) (b:t_tree) : t_tree =
   | Node (lc1,isg1,tr1), Node (lc2,isg2,tr2) ->
     Node (merge_loc lc1 lc2, isg1||isg2, merge_tree_maps tr1 tr2)
   | (Leaf _|Alias _), (Node _ as n) | (Node _ as n), (Leaf _|Alias _) ->
-    ( Print.debug "A package has the same name than an object or an alias. Keeping the package."; n)
+    ( Print.debug "A package has the same name as an object or an alias. Keeping the package."; n)
   | (Alias _ as n), Leaf _ | _, (Alias _ as n)->
-    ( Print.debug "An alias has the same name than a package. Keeping the alias."; n)
+    ( Print.debug "An alias has the same name as a package. Keeping the alias."; n)
 
 (* Add a list of leaves to a tree *)
 let tree_of_leaves (tree:t_tree M.t) (f:loc -> t_leaf) (lst:ident list) : t_tree M.t =
   List.fold_left (
-    fun tree (lc,name) -> merge_tree_maps tree (M.singleton name (Leaf [f lc]))
+    fun tree (lc,name) ->
+      merge_tree_maps tree (M.singleton (CString.from_string name) (Leaf [f lc]))
   ) tree lst 
 
 (* Build a tree from a declaration *)
@@ -115,24 +134,24 @@ let rec decl_to_tree : t_decl -> t_tree M.t = function
       merge_tree_maps tr (decl_to_tree d)
     in
     let tree:t_tree M.t = List.fold_left aux M.empty lst in
-    M.singleton name (Node (lc,is_g,tree))
+    M.singleton (CString.from_string name) (Node (lc,is_g,tree))
   | Package (name,lc,_,New tn) ->
     begin match tname_to_path tn with
-      | None -> M.singleton name (Leaf [L_Incomplete_Alias (fst lc)])
-      | Some path -> M.singleton name (Alias (fst lc,path))
+      | None -> M.singleton (CString.from_string name) (Leaf [L_Incomplete_Alias (fst lc)])
+      | Some path -> M.singleton (CString.from_string name) (Alias (fst lc,path))
     end
   | Package (name,lc,_,Renamed tn) ->
     begin match tname_to_path tn with
-      | None -> M.singleton name (Leaf [L_Incomplete_Alias (fst lc)])
-      | Some path -> M.singleton name (Alias (fst lc,path))
+      | None -> M.singleton (CString.from_string name) (Leaf [L_Incomplete_Alias (fst lc)])
+      | Some path -> M.singleton (CString.from_string name) (Alias (fst lc,path))
     end
   | Subprog name -> 
     begin match designator_to_string name with
-      | Some (lc,name) -> M.singleton name (Leaf [L_Subprog lc])
+      | Some (lc,name) -> M.singleton (CString.from_string name) (Leaf [L_Subprog lc])
       | None -> M.empty
     end
   | Type ((lc,name),opt) ->
-    let map = M.singleton name (Leaf [L_Type lc]) in
+    let map = M.singleton (CString.from_string name) (Leaf [L_Type lc]) in
     begin match opt with
       | None -> map
       | Some lst ->  tree_of_leaves map (fun lc -> L_Enum lc) lst
@@ -143,12 +162,12 @@ let rec decl_to_tree : t_decl -> t_tree M.t = function
   | Other _ -> M.empty
 
 (* Add a branch to a toplevel tree *)
-let add (tbl:toplevel_tree) (name:string) (branch:t_tree) : unit =
+let add (tbl:toplevel_tree) (name:CString.t) (branch:t_tree) : unit =
   try 
-    let branch2 = Hashtbl.find tbl name in
-    Hashtbl.replace tbl name (merge_trees branch branch2)
+    let branch2 = H.find tbl name in
+    H.replace tbl name (merge_trees branch branch2)
   with
-    Not_found -> Hashtbl.add tbl name branch
+    Not_found -> H.add tbl name branch
 
 let add_decl (tbl:toplevel_tree) (d:t_decl) : unit =
   let tree = decl_to_tree d in
@@ -156,12 +175,12 @@ let add_decl (tbl:toplevel_tree) (d:t_decl) : unit =
 
 (* Querying the table *)
 
-let map_find (x:string) (map:'a M.t) : 'a option =
+let map_find (x:CString.t) (map:'a M.t) : 'a option =
   try Some (M.find x map)
   with Not_found -> None
 
-let hash_find (x:'a) (h:('a,'b) Hashtbl.t) : 'b option =
-  try Some (Hashtbl.find h x)
+let hash_find (x:CString.t) (h:'a H.t) : 'b option =
+  try Some (H.find h x)
   with Not_found -> None
 
 let get_loc : t_leaf -> loc = function
@@ -208,7 +227,7 @@ let rec mfind (tbl:toplevel_tree) (tree_path,tree:named_tree) (path:path) : name
           | None -> None
         end
       | Node (_,_,m) ->
-        begin match map_find x m with
+        begin match map_find (CString.from_string x) m with
           | Some child_tree ->
             begin
 (*
@@ -230,7 +249,7 @@ and hfind (tbl:toplevel_tree) (path:path) : named_tree option =
   match path with
   | [] -> None
   | pname::lst ->
-    begin match hash_find pname tbl with
+    begin match hash_find (CString.from_string pname) tbl with
       | Some tree -> mfind tbl ([pname],tree) lst
       | None -> None
     end
@@ -255,8 +274,10 @@ let rec complete_from_tree (tbl:toplevel_tree) (pkg_name:string) (prefix:string)
   | _, Leaf lst -> []
   | _, Node (_,_,pkg) ->
     let regexp = Str.regexp ("^" ^ prefix) in
-    let aux str _ accu =
-      if Str.string_match regexp str 0 then (pkg_name ^ "." ^ str)::accu
+    let aux (str:CString.t) _ (accu:string list) : string list =
+      let str = CString.to_string str in
+      if Str.string_match regexp str 0 then
+        (pkg_name ^ "." ^ str)::accu
       else accu
     in
     M.fold aux pkg []
@@ -273,10 +294,11 @@ let complete (tbl:toplevel_tree) (lst:path) : string list =
     begin
       let regexp = Str.regexp ("^" ^ pre) in
       let aux str _ accu =
+      let str = CString.to_string str in
         if Str.string_match regexp str 0 then str::accu
         else accu
       in
-      Hashtbl.fold aux tbl []
+      H.fold aux tbl []
     end
   | Some (pkg,prefix) ->
     begin match hfind tbl pkg with
