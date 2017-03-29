@@ -13,6 +13,7 @@ type t_action =
 let action = ref Index
 let project = ref "myproject" 
 let files_to_index = ref []
+let check_ext = ref false
 
 (* Indexing *)
 
@@ -27,17 +28,24 @@ let parse (tbl:Table.toplevel_tree) (lb:Lexing.lexbuf) : unit =
     | Lexer.Error (loc,msg) ->
       Print.debug_with_loc lb.Lexing.lex_curr_p "Lexing error: %s." msg
 
+let check_extension filename =
+  (not !check_ext)
+  || (Filename.check_suffix filename ".ads")
+
 let rec index_file (tbl:Table.toplevel_tree) (file:string) : unit =
   try
     begin
       if Sys.is_directory file then
         Array.iter (index_file tbl) (Sys.readdir file)
       else
-        let input = open_in file in
-        let lb = Lexing.from_channel input in
-        lb.Lexing.lex_curr_p <- { lb.Lexing.lex_curr_p with
-                                  Lexing.pos_fname = Files.fullname file; };
-        parse tbl lb
+      if check_extension file then
+        begin
+          let input = open_in file in
+          let lb = Lexing.from_channel input in
+          lb.Lexing.lex_curr_p <- { lb.Lexing.lex_curr_p with
+                                    Lexing.pos_fname = Files.fullname file; };
+          parse tbl lb
+        end
     end
   with Sys_error err -> Print.fail "Error: %s" err
 
@@ -66,6 +74,7 @@ let args = [
   "-locate", Arg.String (fun s -> action := Locate (split s)) ,"Locate an object or a package";
   "-search", Arg.String (fun s -> action := Search (split s)) ,"Search for objects or packages matching a prefix";
   "-print", Arg.String (fun s -> action := Print (split s)) ,"Print the content of a package";
+  "-only-ads", Arg.Set check_ext ,"Only index .abs files";
 ]
 
 let _ =
