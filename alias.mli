@@ -1,7 +1,6 @@
 open Common
 
-val set_current_file : string -> unit
+type t = string*path
 
-val get_local_alias: string -> path option
-
-val update: string(*alias_cache_file*) -> (string(*filename*) * t_decl list) list -> unit
+val get_alias: t_decl -> t list
+val update: string -> (string*t list) list -> unit

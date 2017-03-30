@@ -12,6 +12,7 @@ type t_action =
   | Update
 
 let action = ref Index
+let project = ref "myproject" 
 let files_to_index = ref []
 let check_ext = ref false
 
@@ -43,7 +44,7 @@ let rec index_file (tbl:Table.toplevel_tree) (file:string) : unit =
           let input = open_in file in
           let lb = Lexing.from_channel input in
           lb.Lexing.lex_curr_p <- { lb.Lexing.lex_curr_p with
-                                    Lexing.pos_fname = fullname file; };
+                                    Lexing.pos_fname = Files.fullname file; };
           parse tbl lb
         end
     end
@@ -51,13 +52,13 @@ let rec index_file (tbl:Table.toplevel_tree) (file:string) : unit =
 
 (* Alias *)
 
-let get_decl_list (file:string) : t_decl list =
+let extract_alias (file:string) : (string*path) list =
   let input = open_in file in
   let lb = Lexing.from_channel input in
   let _ = lb.Lexing.lex_curr_p <-
-      { lb.Lexing.lex_curr_p with Lexing.pos_fname = fullname file; } in
+      { lb.Lexing.lex_curr_p with Lexing.pos_fname = Files.fullname file; } in
   try
-    Parser.goal_symbol Lexer.token lb
+    List.flatten (List.map Alias.get_alias (Parser.goal_symbol Lexer.token lb))
   with
     | Parser.Error ->
       ( Print.debug_with_loc lb.Lexing.lex_curr_p
@@ -68,16 +69,14 @@ let get_decl_list (file:string) : t_decl list =
 (* Main *)
 
 let args = [
-  "-p", Arg.Set_string Common.project ,"Set the project to use";
+  "-p", Arg.Set_string project ,"Set the project to use";
   "-v", Arg.Set Print.verbose_mode ,"Verbose mode";
   "-index", Arg.Unit (fun _ -> action := Index) ,"Index a list of files";
   "-update", Arg.Unit (fun _ -> action := Update) ,"Replay last indexing command";
   "-locate", Arg.String (fun s -> action := Locate (split s)) ,"Locate an object or a package";
   "-search", Arg.String (fun s -> action := Search (split s)) ,"Search for objects or packages matching a prefix";
   "-print", Arg.String (fun s -> action := Print (split s)) ,"Print the content of a package";
-  "-extract-alias", Arg.Unit (fun _ -> action := Extract_Alias) ,"Print the content of a package";
   "-only-ads", Arg.Set check_ext ,"Only index .abs files";
-  "-current-file", Arg.String Alias.set_current_file ,"Only index .abs files";
 ]
 
 let _ =
@@ -87,29 +86,29 @@ let _ =
       | Index ->
         let tbl = Table.create () in
         List.iter (index_file tbl) !files_to_index;
-        Table.write tbl !files_to_index !check_ext (get_cache_file ())
+        Table.write tbl !files_to_index !check_ext (Files.get_cache_file !project)
       | Locate s ->
-        let (tbl,_,_) = Table.read (get_cache_file ()) in
+        let (tbl,_,_) = Table.read (Files.get_cache_file !project) in
         let lst = Table.locate tbl s in
         let print_loc lc =
           Printf.printf "%s\n%i\n" lc.Lexing.pos_fname lc.Lexing.pos_lnum
         in
         List.iter print_loc lst
       | Search s ->
-        let (tbl,_,_) = Table.read (get_cache_file ()) in
+        let (tbl,_,_) = Table.read (Files.get_cache_file !project) in
         let lst = Table.complete tbl s in
         List.iter print_endline lst
       | Print s ->
-        let (tbl,_,_) = Table.read (get_cache_file ()) in
+        let (tbl,_,_) = Table.read (Files.get_cache_file !project) in
         Table.print tbl s
       | Extract_Alias ->
-        let lst =
-          List.map (fun fn -> let fn = fullname fn in (fn, get_decl_list fn))
+        let alias =
+          List.map (fun fn -> let fn = Files.fullname fn in (fn, extract_alias fn))
             !files_to_index
         in
-        Alias.update (get_alias_file ()) lst
+        Alias.update (Files.get_alias_file !project) alias
       | Update ->
-        let cache = get_cache_file () in
+        let cache = Files.get_cache_file !project in
         let (_,files,opt_check_ext) = Table.read cache in
         let () = check_ext := opt_check_ext in
         let tbl = Table.create () in

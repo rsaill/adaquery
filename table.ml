@@ -1,6 +1,5 @@
 open Common
 
-let use_local_alias = ref None (*FIXME*)
 (* Types *)
 
 module CString :
@@ -252,11 +251,7 @@ and hfind (tbl:toplevel_tree) (path:path) : named_tree option =
   | pname::lst ->
     begin match hash_find (CString.from_string pname) tbl with
       | Some tree -> mfind tbl ([pname],tree) lst
-      | None ->
-        begin match Alias.get_local_alias pname with
-          | None -> None
-          | Some path -> hfind tbl path
-        end
+      | None -> None
     end
 
 let locate (tbl:toplevel_tree) (path:path) : loc list =
