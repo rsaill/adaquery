@@ -8,7 +8,6 @@ type t_action =
   | Search of path
   | Locate of path
   | Print of path
-  | Extract_Alias
   | Update
 
 let action = ref Index
@@ -50,22 +49,6 @@ let rec index_file (tbl:Table.toplevel_tree) (file:string) : unit =
     end
   with Sys_error err -> Print.fail "Error: %s" err
 
-(* Alias *)
-
-let extract_alias (file:string) : (string*path) list =
-  let input = open_in file in
-  let lb = Lexing.from_channel input in
-  let _ = lb.Lexing.lex_curr_p <-
-      { lb.Lexing.lex_curr_p with Lexing.pos_fname = Files.fullname file; } in
-  try
-    List.flatten (List.map Alias.get_alias (Parser.goal_symbol Lexer.token lb))
-  with
-    | Parser.Error ->
-      ( Print.debug_with_loc lb.Lexing.lex_curr_p
-          "Parsing error: unexpected token '%s'." (Lexing.lexeme lb); [] )
-    | Lexer.Error (loc,msg) ->
-      ( Print.debug_with_loc lb.Lexing.lex_curr_p "Lexing error: %s." msg; [] )
-
 (* Main *)
 
 let args = [
@@ -101,12 +84,6 @@ let _ =
       | Print s ->
         let (tbl,_,_) = Table.read (Files.get_cache_file !project) in
         Table.print tbl s
-      | Extract_Alias ->
-        let alias =
-          List.map (fun fn -> let fn = Files.fullname fn in (fn, extract_alias fn))
-            !files_to_index
-        in
-        Alias.update (Files.get_alias_file !project) alias
       | Update ->
         let cache = Files.get_cache_file !project in
         let (_,files,opt_check_ext) = Table.read cache in
