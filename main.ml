@@ -14,6 +14,7 @@ let action = ref Index
 let project = ref "myproject" 
 let files_to_index = ref []
 let check_ext = ref false
+let scope = ref []
 
 (* Indexing *)
 
@@ -60,6 +61,7 @@ let args = [
   "-search", Arg.String (fun s -> action := Search (split s)) ,"Search for objects or packages matching a prefix";
   "-print", Arg.String (fun s -> action := Print (split s)) ,"Print the content of a package";
   "-only-ads", Arg.Set check_ext ,"Only index .abs files";
+  "-scope", Arg.String (fun s -> scope := split s) ,"Set current scope";
 ]
 
 let _ =
@@ -72,18 +74,18 @@ let _ =
         Table.write tbl !files_to_index !check_ext (Files.get_cache_file !project)
       | Locate s ->
         let (tbl,_,_) = Table.read (Files.get_cache_file !project) in
-        let lst = Table.locate tbl s in
+        let lst = Table.locate tbl !scope s in
         let print_loc lc =
           Printf.printf "%s\n%i\n" lc.Lexing.pos_fname lc.Lexing.pos_lnum
         in
         List.iter print_loc lst
       | Search s ->
         let (tbl,_,_) = Table.read (Files.get_cache_file !project) in
-        let lst = Table.complete tbl s in
+        let lst = Table.complete tbl !scope s in
         List.iter print_endline lst
       | Print s ->
         let (tbl,_,_) = Table.read (Files.get_cache_file !project) in
-        Table.print tbl s
+        Table.print tbl !scope s
       | Update ->
         let cache = Files.get_cache_file !project in
         let (_,files,opt_check_ext) = Table.read cache in

@@ -193,7 +193,7 @@ let get_loc_list = function
   | Node ((lc,_),_,_) -> [lc]
 
 let rec get_all_prefixes : path -> path list = function
-  | [] -> []
+  | [] -> [[]]
   | x::tl ->
     let lst = get_all_prefixes tl in
     []::(List.map (fun y -> x::y) lst)
@@ -254,8 +254,12 @@ and hfind (tbl:toplevel_tree) (path:path) : named_tree option =
       | None -> None
     end
 
-let locate (tbl:toplevel_tree) (path:path) : loc list =
-  match hfind tbl path with
+let hfind_with_scope (tbl:toplevel_tree) (scope:path) (path:path) : named_tree option =
+  let possible_paths = List.map (fun lst -> lst@path) (get_all_prefixes scope) in
+  try_lst (hfind tbl) possible_paths
+
+let locate (tbl:toplevel_tree) (scope:path) (path:path) : loc list =
+  match hfind_with_scope tbl scope path with
   | None -> []
   | Some (_,tree) -> get_loc_list tree
 
@@ -287,7 +291,7 @@ let rec complete_from_tree (tbl:toplevel_tree) (pkg_name:string) (prefix:string)
       | Some ntree -> complete_from_tree tbl pkg_name prefix ntree
     end
 
-let complete (tbl:toplevel_tree) (lst:path) : string list =
+let complete (tbl:toplevel_tree) (scope:path) (lst:path) : string list =
   match remove_last lst with
   | None -> []
   | Some ([],pre) ->
@@ -299,14 +303,15 @@ let complete (tbl:toplevel_tree) (lst:path) : string list =
         else accu
       in
       H.fold aux tbl []
+        (*FIXME scope*)
     end
   | Some (pkg,prefix) ->
-    begin match hfind tbl pkg with
+    begin match hfind_with_scope tbl scope pkg with
       | None -> ( Print.debug "[Search] Package '%s' not found." (String.concat "." pkg); [] )
       | Some tree -> complete_from_tree tbl (String.concat "." pkg) prefix tree 
     end
 
-let print (tbl:toplevel_tree) (path:path) : unit =
-  match hfind tbl path with
+let print (tbl:toplevel_tree) (scope:path) (path:path) : unit =
+  match hfind_with_scope tbl scope path with
   | None -> Printf.fprintf stdout "No package or object found.\n"
   | Some ntree -> print_named_tree stdout ntree
