@@ -260,7 +260,7 @@ let hfind_with_scope (tbl:toplevel_tree) (scope:path) (path:path) : named_tree o
 
 let locate (tbl:toplevel_tree) (scope:path) (path:path) : loc list =
   match hfind_with_scope tbl scope path with
-  | None -> []
+  | None -> Print.fail "[Locate] Object '%s' not found." (String.concat "." path)
   | Some (_,tree) -> get_loc_list tree
 
 let remove_last (lst:string list) : (string list*string) option =
@@ -274,8 +274,8 @@ let remove_last (lst:string list) : (string list*string) option =
   | [] -> None
   | _ -> Some (aux lst)
 
-let rec complete_from_tree (tbl:toplevel_tree) (pkg_name:string) (prefix:string) : named_tree -> string list = function
-  | _, Leaf lst -> []
+let rec complete_from_tree (tbl:toplevel_tree) (pkg_name:string) (prefix:string) : named_tree -> (string list) option = function
+  | _, Leaf lst -> None
   | _, Node (_,_,pkg) ->
     let regexp = Str.regexp ("^" ^ prefix) in
     let aux (str:CString.t) _ (accu:string list) : string list =
@@ -284,10 +284,10 @@ let rec complete_from_tree (tbl:toplevel_tree) (pkg_name:string) (prefix:string)
         (pkg_name ^ "." ^ str)::accu
       else accu
     in
-    M.fold aux pkg []
+    Some (M.fold aux pkg [])
   | current_path, Alias (_,alias_path) ->
     begin match resolve_alias tbl current_path alias_path with
-      | None -> []
+      | None -> None
       | Some ntree -> complete_from_tree tbl pkg_name prefix ntree
     end
 
@@ -302,16 +302,19 @@ let complete (tbl:toplevel_tree) (scope:path) (lst:path) : string list =
         if Str.string_match regexp str 0 then str::accu
         else accu
       in
-      H.fold aux tbl []
-        (*FIXME scope*)
+      H.fold aux tbl [] (*TODO use scope*)
     end
   | Some (pkg,prefix) ->
     begin match hfind_with_scope tbl scope pkg with
-      | None -> ( Print.debug "[Search] Package '%s' not found." (String.concat "." pkg); [] )
-      | Some tree -> complete_from_tree tbl (String.concat "." pkg) prefix tree 
+      | None -> Print.fail "[Completion] Object '%s' not found." (String.concat "." pkg)
+      | Some tree ->
+       begin match complete_from_tree tbl (String.concat "." pkg) prefix tree with
+         | None -> Print.fail "[Completion] Object '%s' not found." (String.concat "." pkg)
+         | Some lst -> lst
+       end
     end
 
 let print (tbl:toplevel_tree) (scope:path) (path:path) : unit =
   match hfind_with_scope tbl scope path with
-  | None -> Printf.fprintf stdout "No package or object found.\n"
+  | None -> Print.fail "[Print] Object '%s' not found." (String.concat "." path)
   | Some ntree -> print_named_tree stdout ntree

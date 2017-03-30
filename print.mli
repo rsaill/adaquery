@@ -9,4 +9,4 @@ val print : int -> t_decl -> unit
 val verbose_mode : bool ref
 val debug : ('a, out_channel, unit, unit) format4 -> 'a
 val debug_with_loc : Lexing.position -> ('a, out_channel, unit, unit) format4 -> 'a
-val fail : ('a, out_channel, unit, unit) format4 -> 'a
+val fail : ('a, out_channel, unit, 'b) format4 -> 'a

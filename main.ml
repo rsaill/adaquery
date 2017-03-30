@@ -58,7 +58,7 @@ let args = [
   "-index", Arg.Unit (fun _ -> action := Index) ,"Index a list of files";
   "-update", Arg.Unit (fun _ -> action := Update) ,"Replay last indexing command";
   "-locate", Arg.String (fun s -> action := Locate (split s)) ,"Locate an object or a package";
-  "-search", Arg.String (fun s -> action := Search (split s)) ,"Search for objects or packages matching a prefix";
+  "-complete", Arg.String (fun s -> action := Search (split s)) ,"Search for objects or packages matching a prefix";
   "-print", Arg.String (fun s -> action := Print (split s)) ,"Print the content of a package";
   "-only-ads", Arg.Set check_ext ,"Only index .abs files";
   "-scope", Arg.String (fun s -> scope := split s) ,"Set current scope";
@@ -66,7 +66,7 @@ let args = [
 
 let _ =
   try
-    Arg.parse args (fun fn -> files_to_index := fn :: !files_to_index) "adaquery -p myproject -index files\nadaquery -p myproject (-locate|-search|-print) decl"; (*FIXME*)
+    Arg.parse args (fun fn -> files_to_index := fn :: !files_to_index) "adaquery [options] -p myproject -index files\nadaquery [options] -p myproject -update\nadaquery [options] -p myproject (-locate|-search|-print) decl";
     begin match !action with
       | Index ->
         let tbl = Table.create () in
@@ -95,4 +95,4 @@ let _ =
         Table.write tbl files opt_check_ext cache
     end
   with
-  | Sys_error err   -> Print.fail "ERROR %s." err
+  | Sys_error err   -> Print.fail "Error %s." err
