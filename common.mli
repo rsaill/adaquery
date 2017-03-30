@@ -1,3 +1,5 @@
+val project : string ref
+
 type loc = Lexing.position
 type path = string list (* A::B::C = package A.B.C *)
 type ident = loc*string
@@ -18,3 +20,8 @@ type t_decl =
 and t_package = New of t_name | Renamed of t_name | Decl of t_decl list
 
 val tname_to_path : t_name -> path option
+
+val fullname : string -> string
+val get_cache_dir  : unit -> string
+val get_cache_file : unit -> string
+val get_alias_file : unit -> string

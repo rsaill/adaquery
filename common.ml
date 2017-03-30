@@ -1,3 +1,5 @@
+let project = ref "myproject"
+
 type loc = Lexing.position
 type path = string list (* A::B::C = package A.B.C *)
 type ident = loc*string
@@ -25,3 +27,29 @@ let tname_to_path (tname:t_name) : path option =
   in
   try Some (List.rev (aux tname))
   with Failure _ -> None
+
+let fullname (fn:string) : string =
+  if Filename.is_relative fn then
+    (Sys.getcwd ()) ^ "/" ^ fn
+  else fn
+
+let get_cache_dir () : string =
+  let dir =
+    try (Unix.getenv "HOME") ^ "/.adaquery"
+    with Not_found -> "."
+  in
+  (if not (Sys.file_exists dir) then
+     if Sys.command ("mkdir " ^ dir) = 0 then
+(*        Print.debug "Directory '%s' was created." dir *) () (*FIXME*)
+     else
+       ( Printf.fprintf stderr "Fail to create directory '%s'." dir )
+  );
+  dir
+
+let get_cache_file () : string =
+  let dir = get_cache_dir () in
+  Printf.sprintf "%s/%s.cache" dir !project
+
+let get_alias_file () : string =
+  let dir = get_cache_dir () in
+  Printf.sprintf "%s/%s.alias" dir !project
