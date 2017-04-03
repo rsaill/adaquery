@@ -7,12 +7,12 @@ module CString :
     type t
     val compare: t -> t -> int
     val from_string: string -> t
-    val to_string: t -> string
+(*     val to_string: t -> string *)
     val hash: t -> int
     val equal: t -> t -> bool
   end = struct
   type t = string
-  let from_string x = String.capitalize_ascii (String.lowercase_ascii x)
+  let from_string = String.lowercase_ascii
   let to_string x = x
   let compare = String.compare
   let hash = Hashtbl.hash
@@ -23,27 +23,27 @@ module M = Map.Make(CString)
 module H = Hashtbl.Make(CString)
 
 type t_leaf =
-  | L_Incomplete_Alias of loc
-  | L_Subprog of loc
-  | L_Type of loc
-  | L_Enum of loc
-  | L_Number of loc
-  | L_Object of loc
-  | L_Exception of loc
+  | L_Incomplete_Alias
+  | L_Subprog
+  | L_Type
+  | L_Enum
+  | L_Number
+  | L_Object
+  | L_Exception
 
 let leaf_to_string = function
-  | L_Incomplete_Alias _ -> "Incomplete Alias"
-  | L_Subprog _ -> "Subprog"
-  | L_Type _ -> "Type"
-  | L_Enum _ -> "Enum"
-  | L_Number _ -> "Number"
-  | L_Object _ -> "Object"
-  | L_Exception _ -> "Exception"
+  | L_Incomplete_Alias -> "Incomplete Alias"
+  | L_Subprog -> "Subprog"
+  | L_Type -> "Type"
+  | L_Enum -> "Enum"
+  | L_Number -> "Number"
+  | L_Object -> "Object"
+  | L_Exception -> "Exception"
 
 type t_tree =
-  | Leaf of t_leaf list (* several objects may have the same name. Ex: to function working on different types *)
-  | Alias of loc*path
-  | Node of (loc*bool)*bool*t_tree M.t
+  | Leaf of (loc*string*t_leaf) list (* several objects may have the same name. Ex: functions working on different types *)
+  | Alias of loc*string*path
+  | Node of (loc*bool)*string*bool*t_tree M.t
 
 type toplevel_tree = t_tree H.t (* t is the top level tree *)
 
@@ -54,18 +54,16 @@ type named_tree = path * t_tree
 let its indent = String.make indent ' '
 
 let rec print_tree (ident:int) out : t_tree -> unit = function
-  | Leaf [l] -> Printf.fprintf out "%s\n" (leaf_to_string l)
   | Leaf [] -> assert false
-  | Leaf (l::_) -> Printf.fprintf out "%s and other definitions\n" (leaf_to_string l)
-  | Node (_,_,tree) -> print_tree_map ident out tree
-  | Alias (_,path) -> Printf.fprintf out "Alias of %s\n" (String.concat "." path)
-
-and print_tree_map (ident:int) out (tree:t_tree M.t) : unit =
-  Printf.fprintf out "Package\n";
-  M.iter ( fun key br ->
-      Printf.fprintf out "%s%s -> %a" (its ident) (CString.to_string key) (print_tree (ident+2)) br
-    ) tree
-
+  | Leaf [(_,name,l)] -> Printf.fprintf out "%s%s -> %s\n" (its ident) name (leaf_to_string l)
+  | Leaf ((_,name,l)::_) -> Printf.fprintf out "%s%s -> %s and other definitions\n" (its ident) name (leaf_to_string l)
+  | Alias (_,name,path) -> Printf.fprintf out "%s%s -> Alias of %s\n" (its ident) name (String.concat "." path)
+  | Node (_,name,_,tree_map) ->
+    begin
+      Printf.fprintf out "%s%s -> Package\n" (its ident) name;
+      M.iter (fun _ br -> print_tree (ident+2) out br) tree_map
+    end
+  
 let print_named_tree (out:out_channel) (_,tree:named_tree) : unit =
   print_tree 0 out tree
 
@@ -107,24 +105,25 @@ let rec merge_tree_maps (tr1:t_tree M.t) (tr2:t_tree M.t) : t_tree M.t =
 
 (* Merge two branches *)
 and merge_trees (a:t_tree) (b:t_tree) : t_tree =
-  let merge_loc (lc1:loc*bool) (lc2:loc*bool) =
+  let merge_loc (lc1,n1:(loc*bool)*string) (lc2,n2:(loc*bool)*string) =
     (if (snd lc1) && (snd lc2) then
        Print.debug "Two packages have the same name. Merging.");
-    if (snd lc1) then lc1 else lc2 in
+    if (snd lc1) then (lc1,n1) else (lc2,n2) in
   match a, b with
   | Leaf lst1, Leaf lst2 -> Leaf (lst1@lst2)
-  | Node (lc1,isg1,tr1), Node (lc2,isg2,tr2) ->
-    Node (merge_loc lc1 lc2, isg1||isg2, merge_tree_maps tr1 tr2)
+  | Node (lc1,n1,isg1,tr1), Node (lc2,n2,isg2,tr2) ->
+    let (l,n) = merge_loc (lc1,n1) (lc2,n2) in
+    Node (l,n,isg1||isg2, merge_tree_maps tr1 tr2)
   | (Leaf _|Alias _), (Node _ as n) | (Node _ as n), (Leaf _|Alias _) ->
     ( Print.debug "A package has the same name as an object or an alias. Keeping the package."; n)
   | (Alias _ as n), Leaf _ | _, (Alias _ as n)->
     ( Print.debug "An alias has the same name as a package. Keeping the alias."; n)
 
 (* Add a list of leaves to a tree *)
-let tree_of_leaves (tree:t_tree M.t) (f:loc -> t_leaf) (lst:ident list) : t_tree M.t =
+let tree_of_leaves (tree:t_tree M.t) (t:t_leaf) (lst:ident list) : t_tree M.t =
   List.fold_left (
     fun tree (lc,name) ->
-      merge_tree_maps tree (M.singleton (CString.from_string name) (Leaf [f lc]))
+      merge_tree_maps tree (M.singleton (CString.from_string name) (Leaf [(lc,name,t)]))
   ) tree lst 
 
 (* Build a tree from a declaration *)
@@ -134,31 +133,34 @@ let rec decl_to_tree : t_decl -> t_tree M.t = function
       merge_tree_maps tr (decl_to_tree d)
     in
     let tree:t_tree M.t = List.fold_left aux M.empty lst in
-    M.singleton (CString.from_string name) (Node (lc,is_g,tree))
-  | Package (name,lc,_,New tn) ->
+    M.singleton (CString.from_string name) (Node (lc,name,is_g,tree))
+  | Package (name,(lc,_),_,New tn) ->
     begin match tname_to_path tn with
-      | None -> M.singleton (CString.from_string name) (Leaf [L_Incomplete_Alias (fst lc)])
-      | Some path -> M.singleton (CString.from_string name) (Alias (fst lc,path))
+      | None -> M.singleton (CString.from_string name)
+                  (Leaf [(lc,name,L_Incomplete_Alias)])
+      | Some path -> M.singleton (CString.from_string name) (Alias (lc,name,path))
     end
-  | Package (name,lc,_,Renamed tn) ->
+  | Package (name,(lc,_),_,Renamed tn) ->
     begin match tname_to_path tn with
-      | None -> M.singleton (CString.from_string name) (Leaf [L_Incomplete_Alias (fst lc)])
-      | Some path -> M.singleton (CString.from_string name) (Alias (fst lc,path))
+      | None -> M.singleton (CString.from_string name)
+                  (Leaf [(lc,name,L_Incomplete_Alias)])
+      | Some path -> M.singleton (CString.from_string name) (Alias (lc,name,path))
     end
   | Subprog name -> 
     begin match designator_to_string name with
-      | Some (lc,name) -> M.singleton (CString.from_string name) (Leaf [L_Subprog lc])
+      | Some (lc,name) -> M.singleton (CString.from_string name)
+                            (Leaf [(lc,name,L_Subprog)])
       | None -> M.empty
     end
   | Type ((lc,name),opt) ->
-    let map = M.singleton (CString.from_string name) (Leaf [L_Type lc]) in
+    let map = M.singleton (CString.from_string name) (Leaf [(lc,name,L_Type)]) in
     begin match opt with
       | None -> map
-      | Some lst ->  tree_of_leaves map (fun lc -> L_Enum lc) lst
+      | Some lst ->  tree_of_leaves map L_Enum lst
     end
-  | Number lst -> tree_of_leaves M.empty (fun lc -> L_Number lc) lst
-  | Object lst -> tree_of_leaves M.empty (fun lc -> L_Object lc) lst
-  | Exception lst -> tree_of_leaves M.empty (fun lc -> L_Exception lc) lst
+  | Number lst -> tree_of_leaves M.empty L_Number lst
+  | Object lst -> tree_of_leaves M.empty L_Object lst
+  | Exception lst -> tree_of_leaves M.empty L_Exception lst
   | Other _ -> M.empty
 
 (* Add a branch to a toplevel tree *)
@@ -183,14 +185,10 @@ let hash_find (x:CString.t) (h:'a H.t) : 'b option =
   try Some (H.find h x)
   with Not_found -> None
 
-let get_loc : t_leaf -> loc = function
-  | L_Subprog l | L_Type l | L_Enum l | L_Incomplete_Alias l
-  | L_Number l | L_Object l | L_Exception l -> l
-
 let get_loc_list = function
-  | Leaf lst -> List.map get_loc lst
-  | Alias (l,_) -> [l]
-  | Node ((lc,_),_,_) -> [lc]
+  | Leaf lst -> List.map (fun (l,_,_) -> l) lst
+  | Alias (l,_,_) -> [l]
+  | Node ((lc,_),_,_,_) -> [lc]
 
 let rec get_all_prefixes : path -> path list = function
   | [] -> [[]]
@@ -213,7 +211,7 @@ let rec mfind (tbl:toplevel_tree) (tree_path,tree:named_tree) (path:path) : name
   | x::lst ->
     begin match tree with
       | Leaf _ -> None
-      | Alias (_,alias_path) -> 
+      | Alias (_,_,alias_path) -> 
         begin match resolve_alias tbl (tree_path@[x]) alias_path with
           | Some tree2 ->
            begin
@@ -226,7 +224,7 @@ let rec mfind (tbl:toplevel_tree) (tree_path,tree:named_tree) (path:path) : name
            end
           | None -> None
         end
-      | Node (_,_,m) ->
+      | Node (_,_,_,m) ->
         begin match map_find (CString.from_string x) m with
           | Some child_tree ->
             begin
@@ -274,18 +272,21 @@ let remove_last (lst:string list) : (string list*string) option =
   | [] -> None
   | _ -> Some (aux lst)
 
+let get_name : t_tree -> string = function
+  | Leaf [] -> assert false
+  | Leaf ((_,name,_)::_) | Alias (_,name,_) | Node (_,name,_,_) -> name
+
 let rec complete_from_tree (tbl:toplevel_tree) (pkg_name:string) (prefix:string) : named_tree -> (string list) option = function
   | _, Leaf lst -> None
-  | _, Node (_,_,pkg) ->
-    let regexp = Str.regexp ("^" ^ prefix) in
-    let aux (str:CString.t) _ (accu:string list) : string list =
-      let str = CString.to_string str in
-      if Str.string_match regexp str 0 then
-        (pkg_name ^ "." ^ str)::accu
+  | _, Node (_,_,_,pkg) ->
+    let regexp = Str.regexp_case_fold ("^" ^ prefix) in
+    let aux _ tr (accu:string list) : string list =
+      let name = get_name tr in
+      if Str.string_match regexp name 0 then (pkg_name ^ "." ^ name)::accu
       else accu
     in
     Some (M.fold aux pkg [])
-  | current_path, Alias (_,alias_path) ->
+  | current_path, Alias (_,_,alias_path) ->
     begin match resolve_alias tbl current_path alias_path with
       | None -> None
       | Some ntree -> complete_from_tree tbl pkg_name prefix ntree
@@ -294,12 +295,12 @@ let rec complete_from_tree (tbl:toplevel_tree) (pkg_name:string) (prefix:string)
 let complete (tbl:toplevel_tree) (scope:path) (lst:path) : string list =
   match remove_last lst with
   | None -> []
-  | Some ([],pre) ->
+  | Some ([],prefix) ->
     begin
-      let regexp = Str.regexp ("^" ^ pre) in
-      let aux str _ accu =
-      let str = CString.to_string str in
-        if Str.string_match regexp str 0 then str::accu
+      let regexp = Str.regexp_case_fold ("^" ^ prefix) in
+      let aux _ tr accu =
+        let name = get_name tr in
+        if Str.string_match regexp name 0 then name::accu
         else accu
       in
       H.fold aux tbl [] (*TODO use scope*)
