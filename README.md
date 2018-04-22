@@ -1,6 +1,7 @@
 # Adaquery
 
 **Adaquery** is an experimental cross referencing tool for *Ada95*.
+I developped this program to get autocompletion and easy navigation for ada projects in Vim (see https://github.com/rsaill/vim-ada).
 
 ## Install
 
